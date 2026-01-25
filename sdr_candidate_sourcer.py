@@ -327,10 +327,11 @@ def search_with_serpapi(query: str, num_results: int = 10) -> List[Dict[str, str
 
             if candidate['full_name'] or candidate['linkedin_url']:
                 candidates.append(candidate)
-                print(f"    Found: {candidate['full_name'] or 'Unknown'} [{candidate['role_type']}]")
+                role_icon = "🎯" if candidate['role_type'] == 'AE' else "📞" if candidate['role_type'] == 'SDR' else "🔄"
+                print(f"    {role_icon} {candidate['full_name'] or 'Unknown'} [{candidate['role_type']}]")
 
     except Exception as e:
-        print(f"    SerpAPI error: {str(e)}")
+        print(f"    ❌ SerpAPI error: {str(e)}")
 
     return candidates
 
@@ -365,10 +366,11 @@ def search_with_duckduckgo(query: str, num_results: int = 10, debug: bool = Fals
 
             if candidate['full_name'] or candidate['linkedin_url']:
                 candidates.append(candidate)
-                print(f"    Found: {candidate['full_name'] or 'Unknown'} [{candidate['role_type']}]")
+                role_icon = "🎯" if candidate['role_type'] == 'AE' else "📞" if candidate['role_type'] == 'SDR' else "🔄"
+                print(f"    {role_icon} {candidate['full_name'] or 'Unknown'} [{candidate['role_type']}]")
 
     except Exception as e:
-        print(f"    DuckDuckGo error: {str(e)}")
+        print(f"    ❌ DuckDuckGo error: {str(e)}")
 
     return candidates
 
@@ -400,14 +402,15 @@ def search_with_google(query: str, num_results: int = 10) -> List[Dict[str, str]
 
             if candidate['full_name'] or candidate['linkedin_url']:
                 candidates.append(candidate)
-                print(f"    Found: {candidate['full_name'] or 'Unknown'} [{candidate['role_type']}]")
+                role_icon = "🎯" if candidate['role_type'] == 'AE' else "📞" if candidate['role_type'] == 'SDR' else "🔄"
+                print(f"    {role_icon} {candidate['full_name'] or 'Unknown'} [{candidate['role_type']}]")
 
     except Exception as e:
         error_msg = str(e)
         if '429' in error_msg or 'Too Many Requests' in error_msg:
-            print(f"    Rate limited by Google. Wait a few minutes and try again.")
+            print(f"    ⚠️  Rate limited by Google. Wait a few minutes and try again.")
         else:
-            print(f"    Google error: {error_msg}")
+            print(f"    ❌ Google error: {error_msg}")
 
     return candidates
 
@@ -634,7 +637,7 @@ def load_existing_candidates(filename: str = 'candidates.csv') -> List[Dict[str,
             for row in reader:
                 headline = row.get('Headline', '')
                 # Get existing role_type or determine it from headline
-                role_type = row.get('Role Type', '')
+                role_type = row.get('Role Fit', '')
                 if not role_type:
                     role_type = determine_role_fit(headline)
 
@@ -655,7 +658,7 @@ def load_existing_candidates(filename: str = 'candidates.csv') -> List[Dict[str,
 
 def save_to_csv(candidates: List[Dict[str, str]], filename: str = 'candidates.csv'):
     """Save candidates to a CSV file."""
-    fieldnames = ['Full Name', 'LinkedIn URL', 'Role Type', 'Headline', 'Email', 'Phone']
+    fieldnames = ['Full Name', 'LinkedIn URL', 'Headline', 'Role Fit', 'Email', 'Phone']
 
     with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
@@ -665,7 +668,7 @@ def save_to_csv(candidates: List[Dict[str, str]], filename: str = 'candidates.cs
             writer.writerow({
                 'Full Name': candidate['full_name'],
                 'LinkedIn URL': candidate['linkedin_url'],
-                'Role Type': candidate.get('role_type', 'SDR'),
+                'Role Fit': candidate.get('role_type', 'SDR'),
                 'Headline': candidate['headline'],
                 'Email': candidate['email'],
                 'Phone': candidate['phone']
@@ -702,22 +705,87 @@ def get_google_sheets_client():
         return None
 
 
-def get_existing_urls_from_sheet(worksheet) -> Set[str]:
-    """Get all existing LinkedIn URLs from the sheet to avoid duplicates."""
+def get_existing_urls_from_sheet(worksheet) -> Dict[str, int]:
+    """Get all existing LinkedIn URLs from the sheet with their row numbers."""
     try:
         # Get all values from LinkedIn URL column (column B - index 2)
         url_column = worksheet.col_values(2)
-        # Skip header, normalize URLs
-        existing_urls = {url.lower().rstrip('/') for url in url_column[1:] if url}
+        # Skip header, map normalized URLs to row numbers (1-indexed, +1 for header)
+        existing_urls = {}
+        for idx, url in enumerate(url_column[1:], start=2):  # start=2 because row 1 is header
+            if url:
+                existing_urls[url.lower().rstrip('/')] = idx
         return existing_urls
     except Exception as e:
         print(f"  Error reading existing URLs: {str(e)}")
-        return set()
+        return {}
+
+
+def get_or_create_worksheet(client, sheet_id: str):
+    """Get or create the worksheet, returning it along with existing URLs."""
+    try:
+        spreadsheet = client.open_by_key(sheet_id)
+
+        try:
+            worksheet = spreadsheet.worksheet(SHEET_NAME)
+        except gspread.WorksheetNotFound:
+            print(f"  📋 Creating new worksheet: {SHEET_NAME}")
+            worksheet = spreadsheet.add_worksheet(title=SHEET_NAME, rows=1000, cols=7)
+            headers = ['Full Name', 'LinkedIn URL', 'Headline', 'Role Fit', 'Email', 'Phone', 'Date Added']
+            worksheet.append_row(headers)
+
+        # Check if headers exist
+        first_row = worksheet.row_values(1)
+        if not first_row or first_row[0] != 'Full Name':
+            worksheet.insert_row(['Full Name', 'LinkedIn URL', 'Headline', 'Role Fit', 'Email', 'Phone', 'Date Added'], 1)
+
+        existing_urls = get_existing_urls_from_sheet(worksheet)
+        return worksheet, existing_urls
+    except Exception as e:
+        print(f"  ❌ Error accessing sheet: {str(e)}")
+        return None, {}
+
+
+def upload_candidate_realtime(worksheet, candidate: Dict[str, str], existing_urls: Dict[str, int]) -> str:
+    """Upload a single candidate in real-time. Returns 'new', 'updated', or 'skipped'."""
+    if not worksheet:
+        return 'skipped'
+
+    today = datetime.now().strftime('%Y-%m-%d')
+    url_normalized = candidate['linkedin_url'].lower().rstrip('/')
+
+    try:
+        if url_normalized in existing_urls:
+            # Update existing candidate
+            row_num = existing_urls[url_normalized]
+            role_type = candidate.get('role_type', 'SDR')
+            worksheet.update_cell(row_num, 4, role_type)  # Role Fit (column D)
+            worksheet.update_cell(row_num, 7, today)  # Date Added
+            return 'updated'
+        else:
+            # Add new candidate
+            row = [
+                candidate['full_name'],
+                candidate['linkedin_url'],
+                candidate['headline'],
+                candidate.get('role_type', 'SDR'),
+                candidate['email'],
+                candidate['phone'],
+                today
+            ]
+            worksheet.append_row(row)
+            # Track the new URL
+            new_row_num = len(existing_urls) + 2  # +2 for header and 1-indexing
+            existing_urls[url_normalized] = new_row_num
+            return 'new'
+    except Exception as e:
+        print(f"      ⚠️  Sheet error: {str(e)[:50]}")
+        return 'skipped'
 
 
 def upload_to_google_sheets(candidates: List[Dict[str, str]], sheet_id: str = None) -> int:
     """
-    Upload candidates to Google Sheets, appending only new entries.
+    Upload candidates to Google Sheets, appending new entries and updating existing ones.
     Returns the number of new candidates added.
     """
     if not GSPREAD_AVAILABLE:
@@ -747,56 +815,77 @@ def upload_to_google_sheets(candidates: List[Dict[str, str]], sheet_id: str = No
             print(f"  Creating new worksheet: {SHEET_NAME}")
             worksheet = spreadsheet.add_worksheet(title=SHEET_NAME, rows=1000, cols=7)
             # Add headers
-            headers = ['Full Name', 'LinkedIn URL', 'Role Type', 'Headline', 'Email', 'Phone', 'Date Added']
+            headers = ['Full Name', 'LinkedIn URL', 'Headline', 'Role Fit', 'Email', 'Phone', 'Date Added']
             worksheet.append_row(headers)
 
         # Check if headers exist, add if first row is empty
         first_row = worksheet.row_values(1)
         if not first_row or first_row[0] != 'Full Name':
             print(f"  Adding headers to worksheet")
-            worksheet.insert_row(['Full Name', 'LinkedIn URL', 'Role Type', 'Headline', 'Email', 'Phone', 'Date Added'], 1)
+            worksheet.insert_row(['Full Name', 'LinkedIn URL', 'Headline', 'Role Fit', 'Email', 'Phone', 'Date Added'], 1)
 
-        # Get existing URLs to avoid duplicates
+        # Get existing URLs with their row numbers
         existing_urls = get_existing_urls_from_sheet(worksheet)
         print(f"  Found {len(existing_urls)} existing candidates in sheet")
 
-        # Filter to only new candidates
+        today = datetime.now().strftime('%Y-%m-%d')
+
+        # Separate new candidates from existing ones
         new_candidates = []
+        candidates_to_update = []
+
         for candidate in candidates:
             url_normalized = candidate['linkedin_url'].lower().rstrip('/')
-            if url_normalized not in existing_urls:
+            if url_normalized in existing_urls:
+                # Existing candidate - mark for update
+                row_num = existing_urls[url_normalized]
+                candidates_to_update.append((row_num, candidate))
+            else:
                 new_candidates.append(candidate)
 
-        if not new_candidates:
-            print("  No new candidates to add (all already in sheet)")
-            return 0
+        # Update existing candidates (update Role Fit and Date Added)
+        updated_count = 0
+        if candidates_to_update:
+            print(f"  Updating {len(candidates_to_update)} existing candidates...")
+            for row_num, candidate in candidates_to_update:
+                try:
+                    # Update Role Fit (column C = 3) and Date Added (column G = 7)
+                    role_type = candidate.get('role_type', 'SDR')
+                    worksheet.update_cell(row_num, 4, role_type)  # Role Fit (column D)
+                    worksheet.update_cell(row_num, 7, today)  # Date Added
+                    updated_count += 1
+                except Exception as e:
+                    print(f"    Error updating row {row_num}: {str(e)}")
+            print(f"  Updated {updated_count} existing candidates with today's date")
 
-        # Prepare rows to append
-        today = datetime.now().strftime('%Y-%m-%d')
-        rows_to_add = []
-        for candidate in new_candidates:
-            rows_to_add.append([
-                candidate['full_name'],
-                candidate['linkedin_url'],
-                candidate.get('role_type', 'SDR'),
-                candidate['headline'],
-                candidate['email'],
-                candidate['phone'],
-                today
-            ])
+        # Append new candidates
+        if new_candidates:
+            rows_to_add = []
+            for candidate in new_candidates:
+                rows_to_add.append([
+                    candidate['full_name'],
+                    candidate['linkedin_url'],
+                    candidate['headline'],
+                    candidate.get('role_type', 'SDR'),
+                    candidate['email'],
+                    candidate['phone'],
+                    today
+                ])
 
-        # Batch append all new rows
-        worksheet.append_rows(rows_to_add)
+            # Batch append all new rows
+            worksheet.append_rows(rows_to_add)
+            print(f"  Added {len(new_candidates)} new candidates")
+        else:
+            print("  No new candidates to add")
 
-        print(f"  Added {len(new_candidates)} new candidates to Google Sheet")
-        return len(new_candidates)
+        return len(new_candidates), updated_count
 
     except gspread.SpreadsheetNotFound:
         print(f"  Spreadsheet not found. Check the GOOGLE_SHEET_ID: {sheet_id}")
-        return 0
+        return 0, 0
     except Exception as e:
         print(f"  Error uploading to Google Sheets: {str(e)}")
-        return 0
+        return 0, 0
 
 
 def main():
@@ -836,68 +925,102 @@ def main():
         end_idx = start_idx + BATCH_SIZE
         queries_to_run = base_queries[start_idx:end_idx]
         total_batches = (len(base_queries) + BATCH_SIZE - 1) // BATCH_SIZE
-        print(f"\nRunning batch {batch_num} of {total_batches} ({len(queries_to_run)} queries)")
+        print(f"\n📦 Running batch {batch_num} of {total_batches} ({len(queries_to_run)} queries)")
     else:
-        print(f"\nRunning all {len(queries_to_run)} queries (use 'python script.py N' for batch N)")
+        print(f"\n🚀 Running all {len(queries_to_run)} queries")
+
+    # Initialize Google Sheets for real-time updates
+    worksheet = None
+    existing_urls = {}
+    if GOOGLE_SHEET_ID and GSPREAD_AVAILABLE:
+        print("\n📊 Connecting to Google Sheets...")
+        client = get_google_sheets_client()
+        if client:
+            worksheet, existing_urls = get_or_create_worksheet(client, GOOGLE_SHEET_ID)
+            if worksheet:
+                print(f"   ✓ Connected! {len(existing_urls)} existing candidates in sheet")
 
     all_candidates = []
+    seen_urls = set()  # Track URLs we've already processed this session
+    stats = {'new': 0, 'updated': 0, 'skipped': 0, 'filtered': 0}
 
     for i, query in enumerate(queries_to_run, 1):
-        print(f"\n[{i}/{len(queries_to_run)}] Running search...")
+        # Determine if this is an SDR or AE query
+        query_type = "AE" if query in AE_GOOGLE_QUERIES or query in AE_DUCKDUCKGO_QUERIES else "SDR"
+        print(f"\n{'─' * 50}")
+        print(f"🔍 [{i}/{len(queries_to_run)}] {query_type} Search")
+        print(f"   {query[:60]}...")
 
         candidates = search_candidates(query, num_results=RESULTS_PER_QUERY)
-        all_candidates.extend(candidates)
 
-        # Rate limiting with longer random interval
+        # Process each candidate in real-time
+        for candidate in candidates:
+            url_normalized = candidate['linkedin_url'].lower().rstrip('/')
+
+            # Skip if already seen this session
+            if url_normalized in seen_urls:
+                continue
+            seen_urls.add(url_normalized)
+
+            # Filter out senior candidates
+            if is_too_senior(candidate.get('headline', '')):
+                stats['filtered'] += 1
+                continue
+
+            all_candidates.append(candidate)
+
+            # Real-time upload to Google Sheets
+            if worksheet:
+                result = upload_candidate_realtime(worksheet, candidate, existing_urls)
+                stats[result] += 1
+
+                # Visual feedback
+                role_icon = "🎯" if candidate['role_type'] == 'AE' else "📞" if candidate['role_type'] == 'SDR' else "🔄"
+                status_icon = "✨" if result == 'new' else "🔄" if result == 'updated' else "⏭️"
+                name = candidate['full_name'] or 'Unknown'
+                print(f"      {status_icon} {role_icon} {name[:30]} [{candidate['role_type']}] → Sheet {result}")
+
+        # Rate limiting
         if i < len(queries_to_run):
-            # Longer pause every BATCH_SIZE queries
             if i % BATCH_SIZE == 0:
-                print(f"    Batch complete. Pausing {BATCH_PAUSE}s to avoid rate limits...")
+                print(f"\n   ⏸️  Batch pause ({BATCH_PAUSE}s)...")
                 time.sleep(BATCH_PAUSE)
             else:
                 sleep_time = random.uniform(MIN_DELAY, MAX_DELAY)
-                print(f"    Waiting {sleep_time:.1f}s before next search...")
                 time.sleep(sleep_time)
 
-    # Filter out senior/executive candidates
-    print("\n" + "-" * 40)
-    print(f"Total results from search: {len(all_candidates)}")
-    all_candidates = filter_senior_candidates(all_candidates)
-    print(f"After filtering executives: {len(all_candidates)}")
+    # Final summary
+    print("\n" + "═" * 50)
+    print("📈 SUMMARY")
+    print("═" * 50)
 
-    # Load existing candidates and merge
-    existing_candidates = load_existing_candidates()
-    all_candidates = existing_candidates + all_candidates
+    # Role breakdown
+    sdr_count = sum(1 for c in all_candidates if c.get('role_type') == 'SDR')
+    ae_count = sum(1 for c in all_candidates if c.get('role_type') == 'AE')
+    mixed_count = sum(1 for c in all_candidates if c.get('role_type') == 'SDR/AE')
 
-    # Deduplicate results
-    print(f"Total after merging with existing: {len(all_candidates)}")
+    print(f"\n👥 Candidates found: {len(all_candidates)}")
+    print(f"   📞 SDR: {sdr_count}")
+    print(f"   🎯 AE:  {ae_count}")
+    print(f"   🔄 Both: {mixed_count}")
+    print(f"   🚫 Filtered (too senior): {stats['filtered']}")
 
-    unique_candidates = deduplicate_candidates(all_candidates)
-    print(f"Unique candidates after deduplication: {len(unique_candidates)}")
-
-    # Show breakdown by role type
-    sdr_count = sum(1 for c in unique_candidates if c.get('role_type') == 'SDR')
-    ae_count = sum(1 for c in unique_candidates if c.get('role_type') == 'AE')
-    mixed_count = sum(1 for c in unique_candidates if c.get('role_type') == 'SDR/AE')
-    print(f"\nRole breakdown: {sdr_count} SDR, {ae_count} AE, {mixed_count} SDR/AE")
+    if worksheet:
+        print(f"\n📊 Google Sheets:")
+        print(f"   ✨ New:     {stats['new']}")
+        print(f"   🔄 Updated: {stats['updated']}")
 
     # Save to CSV (local backup)
-    if unique_candidates:
+    if all_candidates:
+        # Load and merge with existing
+        existing_candidates = load_existing_candidates()
+        merged = existing_candidates + all_candidates
+        unique_candidates = deduplicate_candidates(merged)
         save_to_csv(unique_candidates)
 
-        # Upload to Google Sheets
-        if GOOGLE_SHEET_ID:
-            new_count = upload_to_google_sheets(unique_candidates)
-            if new_count > 0:
-                print(f"\n✓ Google Sheet updated with {new_count} new candidates")
-        else:
-            print("\nTip: Set GOOGLE_SHEET_ID to enable Google Sheets sync")
-    else:
-        print("\nNo candidates found. Try adjusting search queries.")
-
-    print("\n" + "=" * 60)
-    print("Search complete!")
-    print("=" * 60)
+    print("\n" + "═" * 50)
+    print("✅ Search complete!")
+    print("═" * 50)
 
 
 if __name__ == '__main__':
