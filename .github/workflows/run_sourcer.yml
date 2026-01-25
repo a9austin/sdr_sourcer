@@ -1,0 +1,77 @@
+name: Run SDR Candidate Sourcer
+
+on:
+  # Manual trigger from GitHub UI
+  workflow_dispatch:
+    inputs:
+      batch_number:
+        description: 'Batch number (leave empty for all queries)'
+        required: false
+        default: ''
+      update_experience:
+        description: 'Also update Years of Experience column'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+  # Optional: Run on a schedule (e.g., daily at 9 AM UTC)
+  # Uncomment the lines below to enable scheduled runs
+  # schedule:
+  #   - cron: '0 9 * * *'  # Every day at 9 AM UTC
+
+jobs:
+  source-candidates:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Set up Google credentials
+        run: |
+          echo '${{ secrets.GOOGLE_CREDENTIALS_JSON }}' > credentials.json
+
+      - name: Run SDR Candidate Sourcer
+        env:
+          SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
+          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+          GOOGLE_CREDENTIALS_FILE: credentials.json
+        run: |
+          if [ -n "${{ github.event.inputs.batch_number }}" ]; then
+            python sdr_candidate_sourcer.py ${{ github.event.inputs.batch_number }}
+          else
+            python sdr_candidate_sourcer.py
+          fi
+
+      - name: Update Years of Experience
+        if: ${{ github.event.inputs.update_experience == 'true' || github.event_name == 'schedule' }}
+        env:
+          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+          GOOGLE_CREDENTIALS_FILE: credentials.json
+        run: |
+          echo "Waiting 60s for rate limit..."
+          sleep 60
+          python update_experience.py
+
+      - name: Cleanup credentials
+        if: always()
+        run: rm -f credentials.json
+
+      - name: Summary
+        run: |
+          echo "## 🎯 SDR Sourcer Complete!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "View results: [Google Sheet](https://docs.google.com/spreadsheets/d/${{ secrets.GOOGLE_SHEET_ID }}/edit)" >> $GITHUB_STEP_SUMMARY
