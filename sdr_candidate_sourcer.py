@@ -65,7 +65,9 @@ if not (USE_SERPAPI or google_search or DDGS):
 
 # Search queries for Google (supports site: operator)
 # Targeting Utah-based candidates
-GOOGLE_QUERIES = [
+
+# SDR-focused queries - entry level, high grit candidates
+SDR_GOOGLE_QUERIES = [
     # Athletes - NCAA/Student Athletes (2024-2025 grads) in Utah
     'site:linkedin.com/in "Student Athlete" "2024" SDR Utah',
     'site:linkedin.com/in "NCAA" "2024" Sales Utah',
@@ -93,8 +95,43 @@ GOOGLE_QUERIES = [
     'site:linkedin.com/in Entrepreneur "Small Business" SDR Utah',
 ]
 
+# AE-focused queries - targeting Utah Tech companies, ~2 years SaaS experience
+AE_GOOGLE_QUERIES = [
+    # Utah Tech Companies - Account Executives with SaaS experience
+    'site:linkedin.com/in "Account Executive" "SaaS" Utah "2 years"',
+    'site:linkedin.com/in "Account Executive" "SaaS" Utah tech',
+    'site:linkedin.com/in "AE" "B2B SaaS" Utah',
+
+    # Specific Utah Tech Companies
+    'site:linkedin.com/in "Account Executive" Qualtrics Utah',
+    'site:linkedin.com/in "Account Executive" Pluralsight Utah',
+    'site:linkedin.com/in "Account Executive" Podium Utah',
+    'site:linkedin.com/in "Account Executive" Lucid Utah',
+    'site:linkedin.com/in "Account Executive" Domo Utah',
+    'site:linkedin.com/in "Account Executive" Entrata Utah',
+    'site:linkedin.com/in "Account Executive" Weave Utah',
+    'site:linkedin.com/in "Account Executive" Divvy Utah',
+    'site:linkedin.com/in "Account Executive" MX Utah',
+    'site:linkedin.com/in "Account Executive" Instructure Utah',
+
+    # SDRs ready to promote to AE (have SDR experience at Utah tech)
+    'site:linkedin.com/in "SDR" "promoted" "Account Executive" Utah',
+    'site:linkedin.com/in "Sales Development" "SaaS" Utah "2022" OR "2023"',
+
+    # AEs at Utah startups
+    'site:linkedin.com/in "Account Executive" "Series A" OR "Series B" Utah SaaS',
+    'site:linkedin.com/in "Account Executive" startup Utah tech sales',
+
+    # Mid-market / SMB AEs in Utah
+    'site:linkedin.com/in "Account Executive" "SMB" Utah SaaS',
+    'site:linkedin.com/in "Account Executive" "Mid-Market" Utah',
+]
+
+# Combined queries for backward compatibility
+GOOGLE_QUERIES = SDR_GOOGLE_QUERIES + AE_GOOGLE_QUERIES
+
 # Search queries for DuckDuckGo (uses inurl: instead of site:)
-DUCKDUCKGO_QUERIES = [
+SDR_DUCKDUCKGO_QUERIES = [
     # Athletes - NCAA/Student Athletes (2024-2025 grads)
     'linkedin.com/in Student Athlete 2024 SDR',
     'linkedin.com/in NCAA Division 2024 Sales',
@@ -121,6 +158,31 @@ DUCKDUCKGO_QUERIES = [
     'linkedin.com/in Founder Side Hustle Sales',
     'linkedin.com/in Entrepreneur Small Business SDR',
 ]
+
+AE_DUCKDUCKGO_QUERIES = [
+    # Utah Tech Companies - Account Executives
+    'linkedin.com/in Account Executive SaaS Utah',
+    'linkedin.com/in AE B2B SaaS Utah tech',
+
+    # Specific Utah Tech Companies
+    'linkedin.com/in Account Executive Qualtrics',
+    'linkedin.com/in Account Executive Pluralsight',
+    'linkedin.com/in Account Executive Podium Utah',
+    'linkedin.com/in Account Executive Lucid Utah',
+    'linkedin.com/in Account Executive Domo',
+    'linkedin.com/in Account Executive Entrata',
+    'linkedin.com/in Account Executive Weave',
+
+    # SDRs ready for AE
+    'linkedin.com/in SDR promoted Account Executive Utah',
+    'linkedin.com/in Sales Development SaaS Utah',
+
+    # AEs at startups
+    'linkedin.com/in Account Executive startup Utah SaaS',
+    'linkedin.com/in Account Executive SMB Utah',
+]
+
+DUCKDUCKGO_QUERIES = SDR_DUCKDUCKGO_QUERIES + AE_DUCKDUCKGO_QUERIES
 
 # Default to Google queries
 SEARCH_QUERIES = GOOGLE_QUERIES
@@ -165,14 +227,16 @@ def extract_name_from_url(url: str) -> Optional[str]:
     return None
 
 
-def parse_search_result(url: str, title: str, snippet: str) -> Dict[str, str]:
+def parse_search_result(url: str, title: str, snippet: str, source_query: str = '') -> Dict[str, str]:
     """Parse a Google search result to extract candidate info."""
     candidate = {
         'full_name': '',
         'linkedin_url': url,
         'headline': '',
         'email': '',
-        'phone': ''
+        'phone': '',
+        'role_type': '',
+        'source_query': source_query
     }
 
     # Try to extract name from title (usually "Name - Title | LinkedIn")
@@ -198,6 +262,9 @@ def parse_search_result(url: str, title: str, snippet: str) -> Dict[str, str]:
         if len(headline) > 200:
             headline = headline[:200] + '...'
         candidate['headline'] = headline
+
+    # Determine role fit based on headline and source query
+    candidate['role_type'] = determine_role_fit(candidate['headline'], source_query)
 
     return candidate
 
@@ -256,11 +323,11 @@ def search_with_serpapi(query: str, num_results: int = 10) -> List[Dict[str, str
             # Clean the URL
             url = unquote(url).split('?')[0]
 
-            candidate = parse_search_result(url, title, snippet)
+            candidate = parse_search_result(url, title, snippet, source_query=query)
 
             if candidate['full_name'] or candidate['linkedin_url']:
                 candidates.append(candidate)
-                print(f"    Found: {candidate['full_name'] or 'Unknown'}")
+                print(f"    Found: {candidate['full_name'] or 'Unknown'} [{candidate['role_type']}]")
 
     except Exception as e:
         print(f"    SerpAPI error: {str(e)}")
@@ -294,11 +361,11 @@ def search_with_duckduckgo(query: str, num_results: int = 10, debug: bool = Fals
             # Clean the URL
             url = unquote(url).split('?')[0]
 
-            candidate = parse_search_result(url, title, snippet)
+            candidate = parse_search_result(url, title, snippet, source_query=query)
 
             if candidate['full_name'] or candidate['linkedin_url']:
                 candidates.append(candidate)
-                print(f"    Found: {candidate['full_name'] or 'Unknown'}")
+                print(f"    Found: {candidate['full_name'] or 'Unknown'} [{candidate['role_type']}]")
 
     except Exception as e:
         print(f"    DuckDuckGo error: {str(e)}")
@@ -329,11 +396,11 @@ def search_with_google(query: str, num_results: int = 10) -> List[Dict[str, str]
                 continue
 
             url = unquote(url).split('?')[0]
-            candidate = parse_search_result(url, title, snippet)
+            candidate = parse_search_result(url, title, snippet, source_query=query)
 
             if candidate['full_name'] or candidate['linkedin_url']:
                 candidates.append(candidate)
-                print(f"    Found: {candidate['full_name'] or 'Unknown'}")
+                print(f"    Found: {candidate['full_name'] or 'Unknown'} [{candidate['role_type']}]")
 
     except Exception as e:
         error_msg = str(e)
@@ -423,6 +490,110 @@ def is_too_senior(headline: str) -> bool:
     return False
 
 
+# Indicators for AE-level candidates
+AE_INDICATORS = [
+    r'\baccount executive\b',
+    r'\bae\b',
+    r'\bclosing\b',
+    r'\bfull.?cycle\b',
+    r'\bmid.?market\b',
+    r'\benterprise\b',
+    r'\bsmb\b',
+    r'\bquota\b',
+    r'\b\$\d+[mk]\b',  # Revenue numbers like $500K, $1M
+    r'\bclosed\b',
+    r'\bsaas\b.*\b(2|3|4)\+?\s*years?\b',  # 2+ years SaaS experience
+    r'\b(2|3|4)\+?\s*years?\b.*\bsaas\b',
+    r'\bsenior\s*(account|sales)\b',
+]
+
+# Indicators for SDR-level candidates
+SDR_INDICATORS = [
+    r'\bsdr\b',
+    r'\bbdr\b',
+    r'\bsales development\b',
+    r'\bbusiness development representative\b',
+    r'\boutbound\b',
+    r'\bcold calling\b',
+    r'\blead generation\b',
+    r'\bprospecting\b',
+    r'\bstudent athlete\b',
+    r'\bncaa\b',
+    r'\bdoor.?to.?door\b',
+    r'\bd2d\b',
+    r'\brecent graduate\b',
+    r'\bentry.?level\b',
+    r'\bintern\b',
+    r'\brestaurant\b',
+    r'\bbartender\b',
+    r'\bserver\b',
+]
+
+# Utah tech companies (strong AE signal)
+UTAH_TECH_COMPANIES = [
+    'qualtrics', 'pluralsight', 'podium', 'lucid', 'domo', 'entrata',
+    'weave', 'divvy', 'mx', 'instructure', 'vivint', 'healthequity',
+    'recursion', 'carta', 'workfront', 'bamboohr', 'workstream'
+]
+
+
+def determine_role_fit(headline: str, source_query: str = '') -> str:
+    """
+    Determine if a candidate is a better fit for SDR or AE role.
+
+    Returns: 'SDR', 'AE', or 'SDR/AE' (if unclear or could be either)
+    """
+    if not headline:
+        # If no headline, try to infer from the query that found them
+        if source_query:
+            source_lower = source_query.lower()
+            if any(term in source_lower for term in ['account executive', 'ae ', 'saas']):
+                return 'AE'
+        return 'SDR'  # Default to SDR if no info
+
+    headline_lower = headline.lower()
+
+    ae_score = 0
+    sdr_score = 0
+
+    # Check AE indicators
+    for pattern in AE_INDICATORS:
+        if re.search(pattern, headline_lower):
+            ae_score += 1
+
+    # Check SDR indicators
+    for pattern in SDR_INDICATORS:
+        if re.search(pattern, headline_lower):
+            sdr_score += 1
+
+    # Check for Utah tech company experience (strong AE signal)
+    for company in UTAH_TECH_COMPANIES:
+        if company in headline_lower:
+            ae_score += 2  # Weight Utah tech experience heavily
+            break
+
+    # Check for years of experience patterns
+    years_match = re.search(r'(\d+)\+?\s*years?', headline_lower)
+    if years_match:
+        years = int(years_match.group(1))
+        if years >= 2:
+            ae_score += 1
+        if years >= 4:
+            ae_score += 1
+
+    # Determine role based on scores
+    if ae_score > sdr_score and ae_score >= 2:
+        return 'AE'
+    elif sdr_score > ae_score:
+        return 'SDR'
+    elif ae_score > 0 and sdr_score > 0:
+        return 'SDR/AE'  # Could be transitioning or has mixed experience
+    elif ae_score > 0:
+        return 'AE'
+    else:
+        return 'SDR'  # Default to SDR for entry-level/unclear
+
+
 def filter_senior_candidates(candidates: List[Dict[str, str]]) -> List[Dict[str, str]]:
     """Filter out candidates who are too senior for SDR/AE roles."""
     filtered = []
@@ -461,12 +632,20 @@ def load_existing_candidates(filename: str = 'candidates.csv') -> List[Dict[str,
         with open(filename, 'r', newline='', encoding='utf-8') as csvfile:
             reader = csv.DictReader(csvfile)
             for row in reader:
+                headline = row.get('Headline', '')
+                # Get existing role_type or determine it from headline
+                role_type = row.get('Role Type', '')
+                if not role_type:
+                    role_type = determine_role_fit(headline)
+
                 candidates.append({
                     'full_name': row.get('Full Name', ''),
                     'linkedin_url': row.get('LinkedIn URL', ''),
-                    'headline': row.get('Headline', ''),
+                    'headline': headline,
                     'email': row.get('Email', ''),
-                    'phone': row.get('Phone', '')
+                    'phone': row.get('Phone', ''),
+                    'role_type': role_type,
+                    'source_query': row.get('Source Query', '')
                 })
         print(f"Loaded {len(candidates)} existing candidates from {filename}")
     except FileNotFoundError:
@@ -476,7 +655,7 @@ def load_existing_candidates(filename: str = 'candidates.csv') -> List[Dict[str,
 
 def save_to_csv(candidates: List[Dict[str, str]], filename: str = 'candidates.csv'):
     """Save candidates to a CSV file."""
-    fieldnames = ['Full Name', 'LinkedIn URL', 'Headline', 'Email', 'Phone']
+    fieldnames = ['Full Name', 'LinkedIn URL', 'Role Type', 'Headline', 'Email', 'Phone']
 
     with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
@@ -486,6 +665,7 @@ def save_to_csv(candidates: List[Dict[str, str]], filename: str = 'candidates.cs
             writer.writerow({
                 'Full Name': candidate['full_name'],
                 'LinkedIn URL': candidate['linkedin_url'],
+                'Role Type': candidate.get('role_type', 'SDR'),
                 'Headline': candidate['headline'],
                 'Email': candidate['email'],
                 'Phone': candidate['phone']
@@ -525,7 +705,7 @@ def get_google_sheets_client():
 def get_existing_urls_from_sheet(worksheet) -> Set[str]:
     """Get all existing LinkedIn URLs from the sheet to avoid duplicates."""
     try:
-        # Get all values from LinkedIn URL column (column B)
+        # Get all values from LinkedIn URL column (column B - index 2)
         url_column = worksheet.col_values(2)
         # Skip header, normalize URLs
         existing_urls = {url.lower().rstrip('/') for url in url_column[1:] if url}
@@ -565,16 +745,16 @@ def upload_to_google_sheets(candidates: List[Dict[str, str]], sheet_id: str = No
             print(f"  Found existing worksheet: {SHEET_NAME}")
         except gspread.WorksheetNotFound:
             print(f"  Creating new worksheet: {SHEET_NAME}")
-            worksheet = spreadsheet.add_worksheet(title=SHEET_NAME, rows=1000, cols=6)
+            worksheet = spreadsheet.add_worksheet(title=SHEET_NAME, rows=1000, cols=7)
             # Add headers
-            headers = ['Full Name', 'LinkedIn URL', 'Headline', 'Email', 'Phone', 'Date Added']
+            headers = ['Full Name', 'LinkedIn URL', 'Role Type', 'Headline', 'Email', 'Phone', 'Date Added']
             worksheet.append_row(headers)
 
         # Check if headers exist, add if first row is empty
         first_row = worksheet.row_values(1)
         if not first_row or first_row[0] != 'Full Name':
             print(f"  Adding headers to worksheet")
-            worksheet.insert_row(['Full Name', 'LinkedIn URL', 'Headline', 'Email', 'Phone', 'Date Added'], 1)
+            worksheet.insert_row(['Full Name', 'LinkedIn URL', 'Role Type', 'Headline', 'Email', 'Phone', 'Date Added'], 1)
 
         # Get existing URLs to avoid duplicates
         existing_urls = get_existing_urls_from_sheet(worksheet)
@@ -598,6 +778,7 @@ def upload_to_google_sheets(candidates: List[Dict[str, str]], sheet_id: str = No
             rows_to_add.append([
                 candidate['full_name'],
                 candidate['linkedin_url'],
+                candidate.get('role_type', 'SDR'),
                 candidate['headline'],
                 candidate['email'],
                 candidate['phone'],
@@ -693,6 +874,12 @@ def main():
 
     unique_candidates = deduplicate_candidates(all_candidates)
     print(f"Unique candidates after deduplication: {len(unique_candidates)}")
+
+    # Show breakdown by role type
+    sdr_count = sum(1 for c in unique_candidates if c.get('role_type') == 'SDR')
+    ae_count = sum(1 for c in unique_candidates if c.get('role_type') == 'AE')
+    mixed_count = sum(1 for c in unique_candidates if c.get('role_type') == 'SDR/AE')
+    print(f"\nRole breakdown: {sdr_count} SDR, {ae_count} AE, {mixed_count} SDR/AE")
 
     # Save to CSV (local backup)
     if unique_candidates:
