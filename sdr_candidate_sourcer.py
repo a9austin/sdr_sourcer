@@ -93,6 +93,14 @@ SDR_GOOGLE_QUERIES = [
     # Entrepreneurs / Side Hustlers in Utah
     'site:linkedin.com/in Founder "Side Hustle" Sales Utah',
     'site:linkedin.com/in Entrepreneur "Small Business" SDR Utah',
+
+    # Female SDR candidates - pronoun and affinity signals
+    'site:linkedin.com/in "she/her" SDR Sales Utah',
+    'site:linkedin.com/in "she/her" "Sales Development" Utah',
+    'site:linkedin.com/in "Women in Sales" SDR Utah',
+    'site:linkedin.com/in "she/her" "Student Athlete" Sales Utah 2024',
+    'site:linkedin.com/in "she/her" "Door to Door" Sales Utah',
+    'site:linkedin.com/in "she/her" BDR Utah',
 ]
 
 # AE-focused queries - targeting Utah Tech companies, ~2 years SaaS experience
@@ -125,6 +133,14 @@ AE_GOOGLE_QUERIES = [
     # Mid-market / SMB AEs in Utah
     'site:linkedin.com/in "Account Executive" "SMB" Utah SaaS',
     'site:linkedin.com/in "Account Executive" "Mid-Market" Utah',
+
+    # Female AE candidates - pronoun and affinity signals
+    'site:linkedin.com/in "she/her" "Account Executive" Utah',
+    'site:linkedin.com/in "she/her" "Account Executive" SaaS Utah',
+    'site:linkedin.com/in "Women in Sales" "Account Executive" Utah',
+    'site:linkedin.com/in "Women in Tech" "Account Executive" Utah',
+    'site:linkedin.com/in "she/her" AE SaaS Utah',
+    'site:linkedin.com/in "she/her" "Account Executive" tech Utah',
 ]
 
 # Combined queries for backward compatibility
@@ -157,6 +173,14 @@ SDR_DUCKDUCKGO_QUERIES = [
     # Entrepreneurs / Side Hustlers
     'linkedin.com/in Founder Side Hustle Sales',
     'linkedin.com/in Entrepreneur Small Business SDR',
+
+    # Female SDR candidates
+    'linkedin.com/in she/her SDR Sales Utah',
+    'linkedin.com/in she/her Sales Development Utah',
+    'linkedin.com/in Women in Sales SDR Utah',
+    'linkedin.com/in she/her Student Athlete Sales Utah',
+    'linkedin.com/in she/her Door to Door Sales Utah',
+    'linkedin.com/in she/her BDR Utah',
 ]
 
 AE_DUCKDUCKGO_QUERIES = [
@@ -180,6 +204,14 @@ AE_DUCKDUCKGO_QUERIES = [
     # AEs at startups
     'linkedin.com/in Account Executive startup Utah SaaS',
     'linkedin.com/in Account Executive SMB Utah',
+
+    # Female AE candidates
+    'linkedin.com/in she/her Account Executive Utah',
+    'linkedin.com/in she/her Account Executive SaaS Utah',
+    'linkedin.com/in Women in Sales Account Executive Utah',
+    'linkedin.com/in Women in Tech Account Executive Utah',
+    'linkedin.com/in she/her AE SaaS Utah',
+    'linkedin.com/in she/her Account Executive tech Utah',
 ]
 
 DUCKDUCKGO_QUERIES = SDR_DUCKDUCKGO_QUERIES + AE_DUCKDUCKGO_QUERIES
