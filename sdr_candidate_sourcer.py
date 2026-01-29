@@ -753,6 +753,18 @@ def get_existing_urls_from_sheet(worksheet) -> Dict[str, int]:
         return {}
 
 
+def get_column_index(worksheet, column_name: str) -> Optional[int]:
+    """Find the 1-based column index for a given header name."""
+    try:
+        first_row = worksheet.row_values(1)
+        for idx, header in enumerate(first_row, start=1):
+            if header.strip().lower() == column_name.strip().lower():
+                return idx
+    except Exception:
+        pass
+    return None
+
+
 def get_or_create_worksheet(client, sheet_id: str):
     """Get or create the worksheet, returning it along with existing URLs."""
     try:
@@ -778,7 +790,7 @@ def get_or_create_worksheet(client, sheet_id: str):
         return None, {}
 
 
-def upload_candidate_realtime(worksheet, candidate: Dict[str, str], existing_urls: Dict[str, int]) -> str:
+def upload_candidate_realtime(worksheet, candidate: Dict[str, str], existing_urls: Dict[str, int], date_added_col: int = None) -> str:
     """Upload a single candidate in real-time. Returns 'new', 'updated', or 'skipped'."""
     if not worksheet:
         return 'skipped'
@@ -786,13 +798,20 @@ def upload_candidate_realtime(worksheet, candidate: Dict[str, str], existing_url
     today = datetime.now().strftime('%Y-%m-%d')
     url_normalized = candidate['linkedin_url'].lower().rstrip('/')
 
+    # Find the Date Added column dynamically if not provided
+    if date_added_col is None:
+        date_added_col = get_column_index(worksheet, 'Date Added')
+        if date_added_col is None:
+            date_added_col = 7  # fallback
+
     try:
         if url_normalized in existing_urls:
             # Update existing candidate
             row_num = existing_urls[url_normalized]
             role_type = candidate.get('role_type', 'SDR')
-            worksheet.update_cell(row_num, 4, role_type)  # Role Fit (column D)
-            worksheet.update_cell(row_num, 7, today)  # Date Added
+            role_col = get_column_index(worksheet, 'Role Fit') or 4
+            worksheet.update_cell(row_num, role_col, role_type)
+            worksheet.update_cell(row_num, date_added_col, today)
             return 'updated'
         else:
             # Add new candidate
@@ -875,16 +894,19 @@ def upload_to_google_sheets(candidates: List[Dict[str, str]], sheet_id: str = No
             else:
                 new_candidates.append(candidate)
 
+        # Find column indices dynamically by header name
+        date_added_col = get_column_index(worksheet, 'Date Added') or 7
+        role_fit_col = get_column_index(worksheet, 'Role Fit') or 4
+
         # Update existing candidates (update Role Fit and Date Added)
         updated_count = 0
         if candidates_to_update:
             print(f"  Updating {len(candidates_to_update)} existing candidates...")
             for row_num, candidate in candidates_to_update:
                 try:
-                    # Update Role Fit (column C = 3) and Date Added (column G = 7)
                     role_type = candidate.get('role_type', 'SDR')
-                    worksheet.update_cell(row_num, 4, role_type)  # Role Fit (column D)
-                    worksheet.update_cell(row_num, 7, today)  # Date Added
+                    worksheet.update_cell(row_num, role_fit_col, role_type)
+                    worksheet.update_cell(row_num, date_added_col, today)
                     updated_count += 1
                 except Exception as e:
                     print(f"    Error updating row {row_num}: {str(e)}")
@@ -964,13 +986,16 @@ def main():
     # Initialize Google Sheets for real-time updates
     worksheet = None
     existing_urls = {}
+    date_added_col = None
     if GOOGLE_SHEET_ID and GSPREAD_AVAILABLE:
         print("\n📊 Connecting to Google Sheets...")
         client = get_google_sheets_client()
         if client:
             worksheet, existing_urls = get_or_create_worksheet(client, GOOGLE_SHEET_ID)
             if worksheet:
+                date_added_col = get_column_index(worksheet, 'Date Added')
                 print(f"   ✓ Connected! {len(existing_urls)} existing candidates in sheet")
+                print(f"   ✓ Date Added column: {date_added_col}")
 
     all_candidates = []
     seen_urls = set()  # Track URLs we've already processed this session
@@ -1003,7 +1028,7 @@ def main():
 
             # Real-time upload to Google Sheets
             if worksheet:
-                result = upload_candidate_realtime(worksheet, candidate, existing_urls)
+                result = upload_candidate_realtime(worksheet, candidate, existing_urls, date_added_col)
                 stats[result] += 1
 
                 # Visual feedback
