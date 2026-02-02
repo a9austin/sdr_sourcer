@@ -230,7 +230,7 @@ BATCH_PAUSE = 10  # Seconds to pause between batches
 # Set your Google Sheet ID (from the URL: https://docs.google.com/spreadsheets/d/SHEET_ID/edit)
 GOOGLE_SHEET_ID = os.environ.get('GOOGLE_SHEET_ID', '16VwCMk5pbInX7_YHMTRSaJp2caBd8v4GK-td6jux5JE')
 # Path to your service account credentials JSON file
-GOOGLE_CREDENTIALS_FILE = os.environ.get('GOOGLE_CREDENTIALS_FILE', 'credentials.json')
+GOOGLE_CREDENTIALS_FILE = os.environ.get('GOOGLE_CREDENTIALS_FILE', 'sales-sourcing-6ef512645e0f.json')
 # Sheet name (tab) to use
 SHEET_NAME = 'candidates'
 
@@ -268,7 +268,8 @@ def parse_search_result(url: str, title: str, snippet: str, source_query: str = 
         'email': '',
         'phone': '',
         'role_type': '',
-        'source_query': source_query
+        'source_query': source_query,
+        'snippet': snippet or ''
     }
 
     # Try to extract name from title (usually "Name - Title | LinkedIn")
@@ -494,6 +495,7 @@ EXCLUDED_TITLES = [
     r'\bpartner\b',
     r'\bprincipal\b',
     r'\bmanaging director\b',
+    r'\benterprise\b',
 ]
 
 # Titles that are allowed even if they might match exclusion patterns
@@ -502,6 +504,58 @@ ALLOWED_TITLES = [
     r'\bowner\b',
     r'\bco-founder\b',
     r'\bcofounder\b',
+]
+
+# Utah location keywords for filtering candidates with Utah connections
+UTAH_LOCATION_KEYWORDS = [
+    r'\butah\b',
+    r'\bsalt lake city\b',
+    r'\bslc\b',
+    r'\bprovo\b',
+    r'\bogden\b',
+    r'\borem\b',
+    r'\blehi\b',
+    r'\bsandy\b',
+    r'\bdraper\b',
+    r'\bst\.?\s*george\b',
+    r'\blogan\b',
+    r'\bpark city\b',
+    r'\bsilicon slopes\b',
+    r',\s*ut\b',
+    r'\but\s*,',
+    r'\bbountiful\b',
+    r'\bmurray\b',
+    r'\blayton\b',
+    r'\bclearfield\b',
+    r'\bamerican fork\b',
+    r'\bpleasant grove\b',
+    r'\bspanish fork\b',
+    r'\bspringville\b',
+    r'\bheriman\b',
+    r'\bherriman\b',
+    r'\briverton\b',
+    r'\btooele\b',
+]
+
+# Utah colleges and universities
+UTAH_COLLEGES = [
+    r'\bbyu\b',
+    r'\bbrigham young\b',
+    r'\butah state\b',
+    r'\buniversity of utah\b',
+    r'\bu of u\b',
+    r'\bweber state\b',
+    r'\buvu\b',
+    r'\butah valley\b',
+    r'\bsouthern utah\b',
+    r'\bdixie state\b',
+    r'\butah tech\b',
+    r'\bwestminster\b.*\butah\b',
+    r'\bsnow college\b',
+    r'\bslcc\b',
+    r'\bsalt lake community\b',
+    r'\bensign college\b',
+    r'\butah state university\b',
 ]
 
 
@@ -520,6 +574,32 @@ def is_too_senior(headline: str) -> bool:
     # Then check for excluded executive titles
     for pattern in EXCLUDED_TITLES:
         if re.search(pattern, headline_lower):
+            return True
+
+    return False
+
+
+def is_utah_connected(headline: str, snippet: str) -> bool:
+    """Check if a candidate has Utah connections based on headline and snippet.
+
+    Checks for Utah locations, Utah colleges, and Utah tech companies.
+    Does NOT use the source query as a positive signal since that's the problem we're solving.
+    """
+    text = f"{headline} {snippet}".lower()
+
+    # Check Utah location keywords
+    for pattern in UTAH_LOCATION_KEYWORDS:
+        if re.search(pattern, text):
+            return True
+
+    # Check Utah colleges
+    for pattern in UTAH_COLLEGES:
+        if re.search(pattern, text):
+            return True
+
+    # Check Utah tech companies
+    for company in UTAH_TECH_COMPANIES:
+        if company in text:
             return True
 
     return False
@@ -690,7 +770,7 @@ def load_existing_candidates(filename: str = 'candidates.csv') -> List[Dict[str,
 
 def save_to_csv(candidates: List[Dict[str, str]], filename: str = 'candidates.csv'):
     """Save candidates to a CSV file."""
-    fieldnames = ['Full Name', 'LinkedIn URL', 'Headline', 'Role Fit', 'Email', 'Phone']
+    fieldnames = ['Full Name', 'LinkedIn URL', 'Headline', 'Years of Experience', 'Role Fit', 'Notes', 'Email', 'Phone', 'Date Added', 'Status', 'AI Draft']
 
     with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
@@ -774,14 +854,14 @@ def get_or_create_worksheet(client, sheet_id: str):
             worksheet = spreadsheet.worksheet(SHEET_NAME)
         except gspread.WorksheetNotFound:
             print(f"  📋 Creating new worksheet: {SHEET_NAME}")
-            worksheet = spreadsheet.add_worksheet(title=SHEET_NAME, rows=1000, cols=7)
-            headers = ['Full Name', 'LinkedIn URL', 'Headline', 'Role Fit', 'Email', 'Phone', 'Date Added']
+            worksheet = spreadsheet.add_worksheet(title=SHEET_NAME, rows=1000, cols=11)
+            headers = ['Full Name', 'LinkedIn URL', 'Headline', 'Years of Experience', 'Role Fit', 'Notes', 'Email', 'Phone', 'Date Added', 'Status', 'AI Draft']
             worksheet.append_row(headers)
 
         # Check if headers exist
         first_row = worksheet.row_values(1)
         if not first_row or first_row[0] != 'Full Name':
-            worksheet.insert_row(['Full Name', 'LinkedIn URL', 'Headline', 'Role Fit', 'Email', 'Phone', 'Date Added'], 1)
+            worksheet.insert_row(['Full Name', 'LinkedIn URL', 'Headline', 'Years of Experience', 'Role Fit', 'Notes', 'Email', 'Phone', 'Date Added', 'Status', 'AI Draft'], 1)
 
         existing_urls = get_existing_urls_from_sheet(worksheet)
         return worksheet, existing_urls
@@ -802,14 +882,14 @@ def upload_candidate_realtime(worksheet, candidate: Dict[str, str], existing_url
     if date_added_col is None:
         date_added_col = get_column_index(worksheet, 'Date Added')
         if date_added_col is None:
-            date_added_col = 7  # fallback
+            date_added_col = 9  # fallback
 
     try:
         if url_normalized in existing_urls:
             # Update existing candidate
             row_num = existing_urls[url_normalized]
             role_type = candidate.get('role_type', 'SDR')
-            role_col = get_column_index(worksheet, 'Role Fit') or 4
+            role_col = get_column_index(worksheet, 'Role Fit') or 5
             worksheet.update_cell(row_num, role_col, role_type)
             worksheet.update_cell(row_num, date_added_col, today)
             return 'updated'
@@ -819,10 +899,14 @@ def upload_candidate_realtime(worksheet, candidate: Dict[str, str], existing_url
                 candidate['full_name'],
                 candidate['linkedin_url'],
                 candidate['headline'],
+                '',  # Years of Experience
                 candidate.get('role_type', 'SDR'),
+                '',  # Notes
                 candidate['email'],
                 candidate['phone'],
-                today
+                today,
+                '',  # Status
+                '',  # AI Draft
             ]
             worksheet.append_row(row)
             # Track the new URL
@@ -864,16 +948,16 @@ def upload_to_google_sheets(candidates: List[Dict[str, str]], sheet_id: str = No
             print(f"  Found existing worksheet: {SHEET_NAME}")
         except gspread.WorksheetNotFound:
             print(f"  Creating new worksheet: {SHEET_NAME}")
-            worksheet = spreadsheet.add_worksheet(title=SHEET_NAME, rows=1000, cols=7)
+            worksheet = spreadsheet.add_worksheet(title=SHEET_NAME, rows=1000, cols=11)
             # Add headers
-            headers = ['Full Name', 'LinkedIn URL', 'Headline', 'Role Fit', 'Email', 'Phone', 'Date Added']
+            headers = ['Full Name', 'LinkedIn URL', 'Headline', 'Years of Experience', 'Role Fit', 'Notes', 'Email', 'Phone', 'Date Added', 'Status', 'AI Draft']
             worksheet.append_row(headers)
 
         # Check if headers exist, add if first row is empty
         first_row = worksheet.row_values(1)
         if not first_row or first_row[0] != 'Full Name':
             print(f"  Adding headers to worksheet")
-            worksheet.insert_row(['Full Name', 'LinkedIn URL', 'Headline', 'Role Fit', 'Email', 'Phone', 'Date Added'], 1)
+            worksheet.insert_row(['Full Name', 'LinkedIn URL', 'Headline', 'Years of Experience', 'Role Fit', 'Notes', 'Email', 'Phone', 'Date Added', 'Status', 'AI Draft'], 1)
 
         # Get existing URLs with their row numbers
         existing_urls = get_existing_urls_from_sheet(worksheet)
@@ -895,8 +979,8 @@ def upload_to_google_sheets(candidates: List[Dict[str, str]], sheet_id: str = No
                 new_candidates.append(candidate)
 
         # Find column indices dynamically by header name
-        date_added_col = get_column_index(worksheet, 'Date Added') or 7
-        role_fit_col = get_column_index(worksheet, 'Role Fit') or 4
+        date_added_col = get_column_index(worksheet, 'Date Added') or 9
+        role_fit_col = get_column_index(worksheet, 'Role Fit') or 5
 
         # Update existing candidates (update Role Fit and Date Added)
         updated_count = 0
@@ -920,10 +1004,14 @@ def upload_to_google_sheets(candidates: List[Dict[str, str]], sheet_id: str = No
                     candidate['full_name'],
                     candidate['linkedin_url'],
                     candidate['headline'],
+                    '',  # Years of Experience
                     candidate.get('role_type', 'SDR'),
+                    '',  # Notes
                     candidate['email'],
                     candidate['phone'],
-                    today
+                    today,
+                    '',  # Status
+                    '',  # AI Draft
                 ])
 
             # Batch append all new rows
@@ -999,7 +1087,7 @@ def main():
 
     all_candidates = []
     seen_urls = set()  # Track URLs we've already processed this session
-    stats = {'new': 0, 'updated': 0, 'skipped': 0, 'filtered': 0}
+    stats = {'new': 0, 'updated': 0, 'skipped': 0, 'filtered': 0, 'filtered_non_utah': 0}
 
     for i, query in enumerate(queries_to_run, 1):
         # Determine if this is an SDR or AE query
@@ -1022,6 +1110,11 @@ def main():
             # Filter out senior candidates
             if is_too_senior(candidate.get('headline', '')):
                 stats['filtered'] += 1
+                continue
+
+            # Filter out candidates without Utah connections
+            if not is_utah_connected(candidate.get('headline', ''), candidate.get('snippet', '')):
+                stats['filtered_non_utah'] += 1
                 continue
 
             all_candidates.append(candidate)
@@ -1061,6 +1154,7 @@ def main():
     print(f"   🎯 AE:  {ae_count}")
     print(f"   🔄 Both: {mixed_count}")
     print(f"   🚫 Filtered (too senior): {stats['filtered']}")
+    print(f"   🚫 Filtered (non-Utah): {stats['filtered_non_utah']}")
 
     if worksheet:
         print(f"\n📊 Google Sheets:")
