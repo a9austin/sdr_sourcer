@@ -66,41 +66,73 @@ if not (USE_SERPAPI or google_search or DDGS):
 # Search queries for Google (supports site: operator)
 # Targeting Utah-based candidates
 
-# SDR-focused queries - entry level, high grit candidates
+# SDR-focused queries - fresh from college, entry level, high grit candidates
+# We want people who have NOT worked as SDRs - fresh grads, career pivoters, athletes
 SDR_GOOGLE_QUERIES = [
-    # Athletes - NCAA/Student Athletes (2024-2025 grads) in Utah
-    'site:linkedin.com/in "Student Athlete" "2024" SDR Utah',
-    'site:linkedin.com/in "NCAA" "2024" Sales Utah',
-    'site:linkedin.com/in "Student Athlete" "2025" Sales Utah',
-    'site:linkedin.com/in "BYU" OR "Utah State" OR "University of Utah" Sales 2024',
+    # Recent College Graduates (2023-2025) in Utah - fresh from college
+    'site:linkedin.com/in "Class of 2025" Utah',
+    'site:linkedin.com/in "Class of 2024" Utah',
+    'site:linkedin.com/in "Class of 2023" Utah',
+    'site:linkedin.com/in "Recent Graduate" Utah 2024',
+    'site:linkedin.com/in "Recent Graduate" Utah 2025',
+    'site:linkedin.com/in "New Graduate" Utah Sales',
+    'site:linkedin.com/in "BYU" "2024" OR "2025" -SDR -BDR',
+    'site:linkedin.com/in "Utah State" "2024" OR "2025" -SDR -BDR',
+    'site:linkedin.com/in "University of Utah" "2024" OR "2025" -SDR -BDR',
+    'site:linkedin.com/in "UVU" OR "Utah Valley" "2024" OR "2025"',
+    'site:linkedin.com/in "Weber State" "2024" OR "2025"',
+
+    # Athletes - NCAA/Student Athletes (2023-2025 grads) in Utah
+    'site:linkedin.com/in "Student Athlete" "2024" Utah -SDR -BDR',
+    'site:linkedin.com/in "Student Athlete" "2025" Utah',
+    'site:linkedin.com/in "NCAA" "2024" Utah -SDR -BDR',
+    'site:linkedin.com/in "NCAA" "2025" Utah',
+    'site:linkedin.com/in "Varsity" "Captain" Utah 2024',
+    'site:linkedin.com/in "Student Athlete" "BYU" OR "Utah State" 2024',
 
     # D2D Sales Experience (Utah is a D2D hotspot - Vivint HQ)
     'site:linkedin.com/in "Door to Door" Solar Sales Utah',
     'site:linkedin.com/in Vivint "Sales Representative" Utah',
     'site:linkedin.com/in "D2D Sales" Utah',
     'site:linkedin.com/in "Outside Sales" "Door-to-Door" Utah',
+    'site:linkedin.com/in "Pest Control" Sales Utah',
+    'site:linkedin.com/in "Alarm" "Sales Rep" Utah',
 
-    # Restaurant Pivoters - Former restaurant workers in Utah
-    'site:linkedin.com/in "Restaurant Manager" "Account Executive" Utah',
-    'site:linkedin.com/in Bartender SDR Sales Utah',
-    'site:linkedin.com/in "Restaurant" "SaaS Sales" Utah',
+    # Restaurant/Hospitality Pivoters - career changers in Utah
+    'site:linkedin.com/in "Restaurant Manager" Utah -SDR',
+    'site:linkedin.com/in Bartender Utah "looking for" OR "seeking"',
+    'site:linkedin.com/in "Server" "Restaurant" Utah 2024',
+    'site:linkedin.com/in "Hospitality" Utah "Sales" OR "Business"',
 
-    # Restaurant Pivoters - Selling TO restaurants
-    'site:linkedin.com/in Toast "Account Executive" Utah',
+    # Restaurant Tech - Selling TO restaurants
+    'site:linkedin.com/in Toast "Sales Representative" Utah',
     'site:linkedin.com/in 7Shifts Sales Utah',
     'site:linkedin.com/in "Restaurant Tech" Sales Utah',
 
     # Entrepreneurs / Side Hustlers in Utah
     'site:linkedin.com/in Founder "Side Hustle" Sales Utah',
-    'site:linkedin.com/in Entrepreneur "Small Business" SDR Utah',
+    'site:linkedin.com/in Entrepreneur "Small Business" Utah',
 
-    # Female SDR candidates - pronoun and affinity signals
-    'site:linkedin.com/in "she/her" SDR Sales Utah',
-    'site:linkedin.com/in "she/her" "Sales Development" Utah',
-    'site:linkedin.com/in "Women in Sales" SDR Utah',
-    'site:linkedin.com/in "she/her" "Student Athlete" Sales Utah 2024',
+    # Entry-level / Internship backgrounds in Utah
+    'site:linkedin.com/in "Sales Intern" Utah 2024',
+    'site:linkedin.com/in "Marketing Intern" Utah 2024',
+    'site:linkedin.com/in "Business Intern" Utah 2024',
+    'site:linkedin.com/in "Entry Level" Sales Utah -SDR -BDR',
+    'site:linkedin.com/in "Seeking opportunities" Sales Utah',
+
+    # Communications / Business Majors in Utah
+    'site:linkedin.com/in "Communications" "Bachelor" Utah 2024',
+    'site:linkedin.com/in "Business Administration" Utah 2024 OR 2025',
+    'site:linkedin.com/in "Marketing" "Bachelor" Utah 2024 OR 2025',
+
+    # Female candidates - fresh grads and career pivoters
+    'site:linkedin.com/in "she/her" "2024" OR "2025" Utah Sales',
+    'site:linkedin.com/in "she/her" "Student Athlete" Utah 2024',
+    'site:linkedin.com/in "she/her" "Recent Graduate" Utah',
+    'site:linkedin.com/in "Women in Sales" Utah "Entry Level" OR "New Grad"',
     'site:linkedin.com/in "she/her" "Door to Door" Sales Utah',
-    'site:linkedin.com/in "she/her" BDR Utah',
+    'site:linkedin.com/in "she/her" "BYU" OR "Utah State" 2024 Sales',
+    'site:linkedin.com/in "she/her" "Restaurant" OR "Hospitality" Utah',
 ]
 
 # AE-focused queries - targeting Utah Tech companies, ~2 years SaaS experience
@@ -148,39 +180,70 @@ GOOGLE_QUERIES = SDR_GOOGLE_QUERIES + AE_GOOGLE_QUERIES
 
 # Search queries for DuckDuckGo (uses inurl: instead of site:)
 SDR_DUCKDUCKGO_QUERIES = [
-    # Athletes - NCAA/Student Athletes (2024-2025 grads)
-    'linkedin.com/in Student Athlete 2024 SDR',
-    'linkedin.com/in NCAA Division 2024 Sales',
-    'linkedin.com/in Student Athlete 2025 Sales Representative',
-    'linkedin.com/in Varsity Captain Sales 2024',
+    # Recent College Graduates in Utah
+    'linkedin.com/in Class of 2025 Utah',
+    'linkedin.com/in Class of 2024 Utah',
+    'linkedin.com/in Class of 2023 Utah',
+    'linkedin.com/in Recent Graduate Utah 2024',
+    'linkedin.com/in Recent Graduate Utah 2025',
+    'linkedin.com/in New Graduate Utah Sales',
+    'linkedin.com/in BYU 2024 2025 Utah',
+    'linkedin.com/in Utah State University 2024 2025',
+    'linkedin.com/in University of Utah 2024 2025',
+    'linkedin.com/in Utah Valley University 2024 2025',
+    'linkedin.com/in Weber State 2024 2025',
+
+    # Athletes - NCAA/Student Athletes (2023-2025 grads)
+    'linkedin.com/in Student Athlete 2024 Utah',
+    'linkedin.com/in Student Athlete 2025 Utah',
+    'linkedin.com/in NCAA 2024 Utah',
+    'linkedin.com/in NCAA 2025 Utah',
+    'linkedin.com/in Varsity Captain Utah 2024',
+    'linkedin.com/in Student Athlete BYU Utah State 2024',
 
     # D2D Sales Experience
-    'linkedin.com/in Door to Door Solar Sales Representative',
-    'linkedin.com/in Vivint Sales Representative',
-    'linkedin.com/in D2D Sales Solar',
-    'linkedin.com/in Outside Sales Door-to-Door',
+    'linkedin.com/in Door to Door Solar Sales Utah',
+    'linkedin.com/in Vivint Sales Representative Utah',
+    'linkedin.com/in D2D Sales Utah',
+    'linkedin.com/in Outside Sales Door-to-Door Utah',
+    'linkedin.com/in Pest Control Sales Utah',
+    'linkedin.com/in Alarm Sales Rep Utah',
 
-    # Restaurant Pivoters - Former restaurant workers
-    'linkedin.com/in Restaurant Manager Account Executive',
-    'linkedin.com/in Bartender SDR Sales Development',
-    'linkedin.com/in Restaurant SaaS Sales',
+    # Restaurant/Hospitality Pivoters
+    'linkedin.com/in Restaurant Manager Utah',
+    'linkedin.com/in Bartender Utah seeking',
+    'linkedin.com/in Server Restaurant Utah 2024',
+    'linkedin.com/in Hospitality Utah Sales',
 
-    # Restaurant Pivoters - Selling TO restaurants
-    'linkedin.com/in Toast Account Executive Restaurant',
-    'linkedin.com/in 7Shifts Sales Representative',
-    'linkedin.com/in Restaurant Tech Sales',
+    # Restaurant Tech
+    'linkedin.com/in Toast Sales Representative Utah',
+    'linkedin.com/in 7Shifts Sales Utah',
+    'linkedin.com/in Restaurant Tech Sales Utah',
 
     # Entrepreneurs / Side Hustlers
-    'linkedin.com/in Founder Side Hustle Sales',
-    'linkedin.com/in Entrepreneur Small Business SDR',
+    'linkedin.com/in Founder Side Hustle Sales Utah',
+    'linkedin.com/in Entrepreneur Small Business Utah',
 
-    # Female SDR candidates
-    'linkedin.com/in she/her SDR Sales Utah',
-    'linkedin.com/in she/her Sales Development Utah',
-    'linkedin.com/in Women in Sales SDR Utah',
-    'linkedin.com/in she/her Student Athlete Sales Utah',
+    # Entry-level / Internship backgrounds
+    'linkedin.com/in Sales Intern Utah 2024',
+    'linkedin.com/in Marketing Intern Utah 2024',
+    'linkedin.com/in Business Intern Utah 2024',
+    'linkedin.com/in Entry Level Sales Utah',
+    'linkedin.com/in Seeking opportunities Sales Utah',
+
+    # Communications / Business Majors
+    'linkedin.com/in Communications Bachelor Utah 2024',
+    'linkedin.com/in Business Administration Utah 2024',
+    'linkedin.com/in Marketing Bachelor Utah 2024',
+
+    # Female candidates - fresh grads and career pivoters
+    'linkedin.com/in she/her 2024 2025 Utah Sales',
+    'linkedin.com/in she/her Student Athlete Utah 2024',
+    'linkedin.com/in she/her Recent Graduate Utah',
+    'linkedin.com/in Women in Sales Utah Entry Level',
     'linkedin.com/in she/her Door to Door Sales Utah',
-    'linkedin.com/in she/her BDR Utah',
+    'linkedin.com/in she/her BYU Utah State 2024 Sales',
+    'linkedin.com/in she/her Restaurant Hospitality Utah',
 ]
 
 AE_DUCKDUCKGO_QUERIES = [
@@ -220,7 +283,7 @@ DUCKDUCKGO_QUERIES = SDR_DUCKDUCKGO_QUERIES + AE_DUCKDUCKGO_QUERIES
 SEARCH_QUERIES = GOOGLE_QUERIES
 
 # Configuration
-RESULTS_PER_QUERY = 10
+RESULTS_PER_QUERY = 15
 MIN_DELAY = 2  # Minimum seconds between requests (SerpAPI is more tolerant)
 MAX_DELAY = 4  # Maximum seconds between requests
 BATCH_SIZE = 8  # Number of queries to run before a longer pause
@@ -506,6 +569,20 @@ ALLOWED_TITLES = [
     r'\bcofounder\b',
 ]
 
+# Existing SDR/BDR titles to exclude - we want fresh candidates, not current SDRs
+EXISTING_SDR_TITLES = [
+    r'\bsdr\b',
+    r'\bbdr\b',
+    r'\bsales development representative\b',
+    r'\bbusiness development representative\b',
+    r'\bsales development\b',
+    r'\bbusiness development rep\b',
+    r'\blead development representative\b',
+    r'\bldr\b',
+    r'\bmarket development representative\b',
+    r'\bmdr\b',
+]
+
 # Utah location keywords for filtering candidates with Utah connections
 UTAH_LOCATION_KEYWORDS = [
     r'\butah\b',
@@ -574,6 +651,30 @@ def is_too_senior(headline: str) -> bool:
     # Then check for excluded executive titles
     for pattern in EXCLUDED_TITLES:
         if re.search(pattern, headline_lower):
+            return True
+
+    return False
+
+
+def is_existing_sdr(headline: str, snippet: str = '') -> bool:
+    """Check if a candidate already has SDR/BDR experience.
+
+    We want fresh-from-college candidates or people who haven't worked as SDRs.
+    This filters out anyone whose headline or snippet indicates current/past SDR roles.
+    """
+    if not headline:
+        return False
+
+    text = f"{headline} {snippet}".lower()
+
+    # First check if they have an allowed title (founder/owner) - these are always OK
+    for pattern in ALLOWED_TITLES:
+        if re.search(pattern, text):
+            return False
+
+    # Check for existing SDR/BDR titles
+    for pattern in EXISTING_SDR_TITLES:
+        if re.search(pattern, text):
             return True
 
     return False
@@ -1087,7 +1188,7 @@ def main():
 
     all_candidates = []
     seen_urls = set()  # Track URLs we've already processed this session
-    stats = {'new': 0, 'updated': 0, 'skipped': 0, 'filtered': 0, 'filtered_non_utah': 0}
+    stats = {'new': 0, 'updated': 0, 'skipped': 0, 'filtered': 0, 'filtered_non_utah': 0, 'filtered_existing_sdr': 0}
 
     for i, query in enumerate(queries_to_run, 1):
         # Determine if this is an SDR or AE query
@@ -1110,6 +1211,12 @@ def main():
             # Filter out senior candidates
             if is_too_senior(candidate.get('headline', '')):
                 stats['filtered'] += 1
+                continue
+
+            # Filter out candidates who already have SDR/BDR experience (for SDR sourcing)
+            # We want fresh-from-college or career pivoters, not existing SDRs
+            if query_type == "SDR" and is_existing_sdr(candidate.get('headline', ''), candidate.get('snippet', '')):
+                stats['filtered_existing_sdr'] += 1
                 continue
 
             # Filter out candidates without Utah connections
@@ -1154,6 +1261,7 @@ def main():
     print(f"   🎯 AE:  {ae_count}")
     print(f"   🔄 Both: {mixed_count}")
     print(f"   🚫 Filtered (too senior): {stats['filtered']}")
+    print(f"   🚫 Filtered (existing SDR/BDR): {stats['filtered_existing_sdr']}")
     print(f"   🚫 Filtered (non-Utah): {stats['filtered_non_utah']}")
 
     if worksheet:
