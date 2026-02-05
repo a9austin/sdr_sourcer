@@ -8,7 +8,8 @@ import csv
 import re
 import time
 import random
-from typing import List, Dict, Optional, Set
+import argparse
+from typing import List, Dict, Optional, Set, Tuple
 from urllib.parse import unquote
 from datetime import datetime
 
@@ -1131,46 +1132,217 @@ def upload_to_google_sheets(candidates: List[Dict[str, str]], sheet_id: str = No
         return 0, 0
 
 
+def get_stats() -> Dict[str, any]:
+    """Get current sourcing statistics from Google Sheets and local CSV."""
+    stats = {
+        'total_candidates': 0,
+        'sdr_count': 0,
+        'ae_count': 0,
+        'mixed_count': 0,
+        'sheet_connected': False,
+        'local_csv_count': 0
+    }
+
+    # Load from local CSV
+    try:
+        candidates = load_existing_candidates()
+        stats['local_csv_count'] = len(candidates)
+        for c in candidates:
+            role = c.get('role_type', 'SDR')
+            if role == 'SDR':
+                stats['sdr_count'] += 1
+            elif role == 'AE':
+                stats['ae_count'] += 1
+            else:
+                stats['mixed_count'] += 1
+    except Exception:
+        pass
+
+    # Try to get stats from Google Sheets
+    if GSPREAD_AVAILABLE and GOOGLE_SHEET_ID:
+        try:
+            client = get_google_sheets_client()
+            if client:
+                spreadsheet = client.open_by_key(GOOGLE_SHEET_ID)
+                worksheet = spreadsheet.worksheet(SHEET_NAME)
+                all_data = worksheet.get_all_values()
+                stats['sheet_connected'] = True
+                stats['total_candidates'] = len(all_data) - 1  # Minus header
+
+                # Get role breakdown from sheet
+                if len(all_data) > 1:
+                    headers = all_data[0]
+                    role_col_idx = None
+                    for idx, h in enumerate(headers):
+                        if 'role' in h.lower():
+                            role_col_idx = idx
+                            break
+
+                    if role_col_idx is not None:
+                        stats['sdr_count'] = 0
+                        stats['ae_count'] = 0
+                        stats['mixed_count'] = 0
+                        for row in all_data[1:]:
+                            if len(row) > role_col_idx:
+                                role = row[role_col_idx]
+                                if role == 'SDR':
+                                    stats['sdr_count'] += 1
+                                elif role == 'AE':
+                                    stats['ae_count'] += 1
+                                else:
+                                    stats['mixed_count'] += 1
+        except Exception as e:
+            print(f"  Warning: Could not connect to Google Sheets: {e}")
+
+    return stats
+
+
+def print_stats():
+    """Print current sourcing statistics."""
+    print("=" * 60)
+    print("SDR Candidate Sourcer - Statistics")
+    print("=" * 60)
+
+    stats = get_stats()
+
+    print(f"\n{'Source':<20} {'Count':<10}")
+    print("-" * 30)
+
+    if stats['sheet_connected']:
+        print(f"{'Google Sheets':<20} {stats['total_candidates']:<10}")
+    else:
+        print(f"{'Google Sheets':<20} {'Not connected':<10}")
+
+    print(f"{'Local CSV':<20} {stats['local_csv_count']:<10}")
+
+    print(f"\n{'Role Breakdown':<20}")
+    print("-" * 30)
+    print(f"{'SDR':<20} {stats['sdr_count']:<10}")
+    print(f"{'AE':<20} {stats['ae_count']:<10}")
+    print(f"{'SDR/AE (mixed)':<20} {stats['mixed_count']:<10}")
+
+    # Query info
+    print(f"\n{'Query Counts':<20}")
+    print("-" * 30)
+    print(f"{'SDR queries':<20} {len(SDR_GOOGLE_QUERIES):<10}")
+    print(f"{'AE queries':<20} {len(AE_GOOGLE_QUERIES):<10}")
+    print(f"{'Total queries':<20} {len(GOOGLE_QUERIES):<10}")
+
+    print("\n" + "=" * 60)
+
+
+def parse_args():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description='SDR Candidate Sourcer - Find high-grit SDR/AE candidates in Utah',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='''
+Examples:
+  python sdr_candidate_sourcer.py --stats          # Show statistics
+  python sdr_candidate_sourcer.py --count 10 --type sdr   # Source 10 SDR candidates
+  python sdr_candidate_sourcer.py --count 5 --type ae     # Source 5 AE candidates
+  python sdr_candidate_sourcer.py --dry-run        # Preview queries without executing
+  python sdr_candidate_sourcer.py --query "site:linkedin.com/in BYU 2024 Utah"
+        '''
+    )
+
+    parser.add_argument('--count', '-c', type=int, default=None,
+                        help='Number of new candidates to find (stops after finding this many)')
+    parser.add_argument('--type', '-t', choices=['sdr', 'ae', 'both'], default='both',
+                        help='Type of candidates to source (default: both)')
+    parser.add_argument('--stats', '-s', action='store_true',
+                        help='Show current statistics and exit')
+    parser.add_argument('--dry-run', '-d', action='store_true',
+                        help='Preview queries without executing searches')
+    parser.add_argument('--query', '-q', type=str, default=None,
+                        help='Run a specific custom search query')
+    parser.add_argument('batch', nargs='?', type=int, default=None,
+                        help='Batch number to run (legacy argument)')
+
+    return parser.parse_args()
+
+
 def main():
     """Main function to run the candidate sourcer."""
-    import sys
+    args = parse_args()
+
+    # Handle --stats flag
+    if args.stats:
+        print_stats()
+        return
 
     print("=" * 60)
     print("SDR Candidate Sourcer for Workstream")
     print("Searching for high-grit SDR/AE candidates...")
     print("=" * 60)
 
-    # Select queries based on search engine
+    # Select base queries based on search engine
     if USE_SERPAPI:
-        base_queries = GOOGLE_QUERIES  # SerpAPI uses Google, so use Google queries
+        google_queries = GOOGLE_QUERIES
+        sdr_queries = SDR_GOOGLE_QUERIES
+        ae_queries = AE_GOOGLE_QUERIES
         print("Using SerpAPI (Google) search engine")
     elif USE_GOOGLE:
-        base_queries = GOOGLE_QUERIES
+        google_queries = GOOGLE_QUERIES
+        sdr_queries = SDR_GOOGLE_QUERIES
+        ae_queries = AE_GOOGLE_QUERIES
         print("Using Google search engine (may hit rate limits)")
     elif USE_DUCKDUCKGO:
-        base_queries = DUCKDUCKGO_QUERIES
+        google_queries = DUCKDUCKGO_QUERIES
+        sdr_queries = SDR_DUCKDUCKGO_QUERIES
+        ae_queries = AE_DUCKDUCKGO_QUERIES
         print("Using DuckDuckGo search engine (limited LinkedIn indexing)")
     else:
         print("ERROR: No search engine available")
         return
 
-    # Check for batch argument (e.g., python script.py 1 for first batch)
-    batch_num = None
-    if len(sys.argv) > 1:
-        try:
-            batch_num = int(sys.argv[1])
-        except ValueError:
-            pass
-
-    queries_to_run = base_queries
-    if batch_num is not None:
-        start_idx = (batch_num - 1) * BATCH_SIZE
-        end_idx = start_idx + BATCH_SIZE
-        queries_to_run = base_queries[start_idx:end_idx]
-        total_batches = (len(base_queries) + BATCH_SIZE - 1) // BATCH_SIZE
-        print(f"\n📦 Running batch {batch_num} of {total_batches} ({len(queries_to_run)} queries)")
+    # Handle custom query
+    if args.query:
+        queries_to_run = [args.query]
+        print(f"\n🔍 Running custom query")
     else:
-        print(f"\n🚀 Running all {len(queries_to_run)} queries")
+        # Select queries based on type
+        if args.type == 'sdr':
+            base_queries = sdr_queries
+            print(f"\n📞 Sourcing SDR candidates only")
+        elif args.type == 'ae':
+            base_queries = ae_queries
+            print(f"\n🎯 Sourcing AE candidates only")
+        else:
+            base_queries = google_queries
+            print(f"\n🔄 Sourcing both SDR and AE candidates")
+
+        # Handle batch argument (legacy)
+        batch_num = args.batch
+        queries_to_run = base_queries
+        if batch_num is not None:
+            start_idx = (batch_num - 1) * BATCH_SIZE
+            end_idx = start_idx + BATCH_SIZE
+            queries_to_run = base_queries[start_idx:end_idx]
+            total_batches = (len(base_queries) + BATCH_SIZE - 1) // BATCH_SIZE
+            print(f"\n📦 Running batch {batch_num} of {total_batches} ({len(queries_to_run)} queries)")
+        else:
+            print(f"📋 {len(queries_to_run)} queries available")
+
+    # Handle --dry-run
+    if args.dry_run:
+        print("\n" + "=" * 60)
+        print("DRY RUN - Queries that would be executed:")
+        print("=" * 60)
+        for i, query in enumerate(queries_to_run, 1):
+            query_type = "AE" if query in AE_GOOGLE_QUERIES or query in AE_DUCKDUCKGO_QUERIES else "SDR"
+            print(f"  [{i}] ({query_type}) {query[:70]}...")
+        print("\n" + "=" * 60)
+        print(f"Total: {len(queries_to_run)} queries")
+        if args.count:
+            print(f"Would stop after finding {args.count} new candidates")
+        print("=" * 60)
+        return
+
+    # Set target count
+    target_count = args.count
+    if target_count:
+        print(f"🎯 Target: {target_count} new candidates")
 
     # Initialize Google Sheets for real-time updates
     worksheet = None
@@ -1188,9 +1360,13 @@ def main():
 
     all_candidates = []
     seen_urls = set()  # Track URLs we've already processed this session
-    stats = {'new': 0, 'updated': 0, 'skipped': 0, 'filtered': 0, 'filtered_non_utah': 0, 'filtered_existing_sdr': 0}
+    run_stats = {'new': 0, 'updated': 0, 'skipped': 0, 'filtered': 0, 'filtered_non_utah': 0, 'filtered_existing_sdr': 0}
+    target_reached = False
 
     for i, query in enumerate(queries_to_run, 1):
+        if target_reached:
+            break
+
         # Determine if this is an SDR or AE query
         query_type = "AE" if query in AE_GOOGLE_QUERIES or query in AE_DUCKDUCKGO_QUERIES else "SDR"
         print(f"\n{'─' * 50}")
@@ -1210,18 +1386,18 @@ def main():
 
             # Filter out senior candidates
             if is_too_senior(candidate.get('headline', '')):
-                stats['filtered'] += 1
+                run_stats['filtered'] += 1
                 continue
 
             # Filter out candidates who already have SDR/BDR experience (for SDR sourcing)
             # We want fresh-from-college or career pivoters, not existing SDRs
             if query_type == "SDR" and is_existing_sdr(candidate.get('headline', ''), candidate.get('snippet', '')):
-                stats['filtered_existing_sdr'] += 1
+                run_stats['filtered_existing_sdr'] += 1
                 continue
 
             # Filter out candidates without Utah connections
             if not is_utah_connected(candidate.get('headline', ''), candidate.get('snippet', '')):
-                stats['filtered_non_utah'] += 1
+                run_stats['filtered_non_utah'] += 1
                 continue
 
             all_candidates.append(candidate)
@@ -1229,7 +1405,7 @@ def main():
             # Real-time upload to Google Sheets
             if worksheet:
                 result = upload_candidate_realtime(worksheet, candidate, existing_urls, date_added_col)
-                stats[result] += 1
+                run_stats[result] += 1
 
                 # Visual feedback
                 role_icon = "🎯" if candidate['role_type'] == 'AE' else "📞" if candidate['role_type'] == 'SDR' else "🔄"
@@ -1237,8 +1413,14 @@ def main():
                 name = candidate['full_name'] or 'Unknown'
                 print(f"      {status_icon} {role_icon} {name[:30]} [{candidate['role_type']}] → Sheet {result}")
 
-        # Rate limiting
-        if i < len(queries_to_run):
+                # Check if we've reached the target count
+                if target_count and run_stats['new'] >= target_count:
+                    print(f"\n   ✅ Target reached: {run_stats['new']} new candidates found!")
+                    target_reached = True
+                    break
+
+        # Rate limiting (only if we haven't reached target and not at end)
+        if not target_reached and i < len(queries_to_run):
             if i % BATCH_SIZE == 0:
                 print(f"\n   ⏸️  Batch pause ({BATCH_PAUSE}s)...")
                 time.sleep(BATCH_PAUSE)
@@ -1260,14 +1442,14 @@ def main():
     print(f"   📞 SDR: {sdr_count}")
     print(f"   🎯 AE:  {ae_count}")
     print(f"   🔄 Both: {mixed_count}")
-    print(f"   🚫 Filtered (too senior): {stats['filtered']}")
-    print(f"   🚫 Filtered (existing SDR/BDR): {stats['filtered_existing_sdr']}")
-    print(f"   🚫 Filtered (non-Utah): {stats['filtered_non_utah']}")
+    print(f"   🚫 Filtered (too senior): {run_stats['filtered']}")
+    print(f"   🚫 Filtered (existing SDR/BDR): {run_stats['filtered_existing_sdr']}")
+    print(f"   🚫 Filtered (non-Utah): {run_stats['filtered_non_utah']}")
 
     if worksheet:
         print(f"\n📊 Google Sheets:")
-        print(f"   ✨ New:     {stats['new']}")
-        print(f"   🔄 Updated: {stats['updated']}")
+        print(f"   ✨ New:     {run_stats['new']}")
+        print(f"   🔄 Updated: {run_stats['updated']}")
 
     # Save to CSV (local backup)
     if all_candidates:
